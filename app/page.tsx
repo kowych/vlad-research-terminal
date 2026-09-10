@@ -37,37 +37,7 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-[#0a0a0a] text-zinc-100">
-      
-      {/* NAVIGATION */}
-      <nav className="border-b border-zinc-800/80">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-5 lg:px-8">
-          <div className="font-mono text-sm tracking-wider">
-            VLAD / RESEARCH
-          </div>
-
-          <div className="hidden items-center gap-8 font-mono text-xs text-zinc-500 sm:flex">
-            <a href="#" className="text-zinc-100">
-              RESEARCH
-            </a>
-            <a href="#" className="transition-colors hover:text-zinc-100">
-              TRADES
-            </a>
-            <a href="#" className="transition-colors hover:text-zinc-100">
-              MACRO
-            </a>
-            <a href="#" className="transition-colors hover:text-zinc-100">
-              TERMINAL
-            </a>
-            <a href="#" className="transition-colors hover:text-zinc-100">
-              CV
-            </a>
-          </div>
-
-          <div className="font-mono text-xs text-zinc-600">
-            10 SEP 2026
-          </div>
-        </div>
-      </nav>
+      <Navbar />
 
       {/* HERO */}
       <section className="mx-auto max-w-6xl px-6 py-24 lg:px-8 lg:py-32">
