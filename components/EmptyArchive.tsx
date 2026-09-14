@@ -1,0 +1,2 @@
+type EmptyArchiveProps = { label: string; detail: string };
+export default function EmptyArchive({ label, detail }: EmptyArchiveProps) { return <section className="border-y border-zinc-800 py-16 sm:py-20"><p className="font-mono text-xs tracking-[0.16em] text-zinc-500">{label}</p><h2 className="mt-4 text-2xl font-medium tracking-tight">The archive is being prepared.</h2><p className="mt-3 max-w-xl text-sm leading-6 text-zinc-500">{detail}</p></section>; }

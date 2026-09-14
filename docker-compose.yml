@@ -1,0 +1,22 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: muklanovich-research-postgres
+    environment:
+      POSTGRES_DB: muklanovich_research
+      POSTGRES_USER: research
+      POSTGRES_PASSWORD: research_local_only
+    ports:
+      - "5432:5432"
+    volumes:
+      - macro_postgres_data:/var/lib/postgresql/data
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./database/seed.sql:/docker-entrypoint-initdb.d/02-seed.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U research -d muklanovich_research"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  macro_postgres_data:
