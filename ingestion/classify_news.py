@@ -49,6 +49,8 @@ SOURCE_COUNTRIES = {
     "ecb-communications": ("DE", "FR", "IT", "ES"),
     "bank-of-canada-communications": ("CA",),
     "reserve-bank-australia-communications": ("AU",),
+    "eu-council-communications": ("DE", "FR", "IT", "ES", "PL"),
+    "us-eia-energy": ("US",),
 }
 
 
@@ -136,7 +138,7 @@ def classify(article: dict[str, str]) -> tuple[list[CountryImpact], list[str], s
 
 
 def source_score(source_slug: str) -> int:
-    return 5 if source_slug in {"federal-reserve-board", "ecb-communications", "bank-of-canada-communications", "reserve-bank-australia-communications"} else 2 if source_slug == "gdelt-discovery" else 3
+    return 5 if source_slug in {"federal-reserve-board", "ecb-communications", "bank-of-canada-communications", "reserve-bank-australia-communications", "eu-council-communications", "us-eia-energy"} else 2 if source_slug == "gdelt-discovery" else 3
 
 
 def upsert_entity(cursor: psycopg.Cursor, entity: Entity, country_ids: dict[str, str]) -> str:

@@ -11,6 +11,34 @@ export type MacroSeries = {
   change?: number;
   points: MacroPoint[];
 };
-export type MacroEvent = { id: string; title: string; eventType: string; materiality: number; score?: number; impactScope: "direct" | "regional" | "spillover"; occurredAt: string; sourceName: string; originalUrl: string; indicators: string[] };
-export type CalendarEvent = { id: string; title: string; category?: string; scheduledAt: string; importance: number; forecast?: string; previous?: string; currency?: string; sourceName?: string; sourceUrl?: string };
-export type UsMacroDesk = { generatedAt: string; regime: string; rationale: string; series: MacroSeries[]; events: MacroEvent[]; calendar: CalendarEvent[] };
+export type EventVerification = "UNVERIFIED" | "CORROBORATED" | "OFFICIAL" | "MARKET_CONFIRMED";
+export type MacroEvent = {
+  id: string;
+  title: string;
+  eventType: string;
+  materiality: number;
+  score?: number;
+  impactScope: "direct" | "regional" | "spillover";
+  occurredAt: string;
+  sourceName: string;
+  sourceCount: number;
+  originalUrl: string;
+  indicators: string[];
+  verification: EventVerification;
+};
+export type RiskEvent = MacroEvent & { countryIso2: string[] };
+export type RiskTapeResponse = { generatedAt: string; events: RiskEvent[] };
+export type CalendarEvent = { id: string; title: string; category?: string; scheduledAt: string; timingPrecision: "exact" | "estimated" | "date_only"; importance: number; forecast?: string; previous?: string; currency?: string; sourceName?: string; sourceUrl?: string };
+export type GlobalCalendarEvent = CalendarEvent & { countryIso2?: string; countryName?: string };
+export type GlobalCalendarResponse = { generatedAt: string; events: GlobalCalendarEvent[] };
+export type NewsSourceHealth = { slug: string; name: string; status: "CURRENT" | "DELAYED" | "ATTENTION" | "PENDING"; checkedAt?: string; recordsWritten?: number; error?: string };
+export type MacroDesk = {
+  generatedAt: string;
+  regime: string;
+  rationale: string;
+  series: MacroSeries[];
+  events: MacroEvent[];
+  calendar: CalendarEvent[];
+  calendarSources: string[];
+  newsHealth: NewsSourceHealth[];
+};

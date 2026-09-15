@@ -29,24 +29,27 @@ class SeriesDefinition:
     fred_series_id: str
     display_name: str
     unit: str
+    frequency: str
 
 
 US_SERIES = (
-    SeriesDefinition("policy-rate", "DFF", "Effective Federal Funds Rate", "percent"),
-    SeriesDefinition("cpi", "CPIAUCSL", "Consumer Price Index", "index"),
-    SeriesDefinition("unemployment-rate", "UNRATE", "Unemployment Rate", "percent"),
-    SeriesDefinition("nonfarm-payrolls", "PAYEMS", "All Employees: Total Nonfarm", "thousands of persons"),
-    SeriesDefinition("real-gdp", "GDPC1", "Real Gross Domestic Product", "billions of chained dollars"),
-    SeriesDefinition("treasury-2y", "DGS2", "2-Year US Treasury Yield", "percent"),
-    SeriesDefinition("treasury-10y", "DGS10", "10-Year US Treasury Yield", "percent"),
+    SeriesDefinition("policy-rate", "DFF", "Effective Federal Funds Rate", "percent", "daily"),
+    SeriesDefinition("cpi", "CPIAUCSL", "Consumer Price Index", "index", "monthly"),
+    SeriesDefinition("core-cpi", "CPILFESL", "Consumer Price Index Less Food and Energy", "index", "monthly"),
+    SeriesDefinition("unemployment-rate", "UNRATE", "Unemployment Rate", "percent", "monthly"),
+    SeriesDefinition("nonfarm-payrolls", "PAYEMS", "All Employees: Total Nonfarm", "thousands of persons", "monthly"),
+    SeriesDefinition("real-gdp", "GDPC1", "Real Gross Domestic Product", "billions of chained dollars", "quarterly"),
+    SeriesDefinition("real-gdp-growth", "A191RL1Q225SBEA", "Real GDP Growth", "percent", "quarterly"),
+    SeriesDefinition("treasury-2y", "DGS2", "2-Year US Treasury Yield", "percent", "daily"),
+    SeriesDefinition("treasury-10y", "DGS10", "10-Year US Treasury Yield", "percent", "daily"),
 )
 
 JAPAN_SERIES = (
-    SeriesDefinition("policy-rate", "IRSTCB01JPM156N", "Bank of Japan Central Bank Rate", "percent"),
-    SeriesDefinition("cpi", "JPNCPIALLMINMEI", "Japan Consumer Price Index", "index"),
-    SeriesDefinition("unemployment-rate", "LRUNTTTTJPM156S", "Japan Unemployment Rate", "percent"),
-    SeriesDefinition("real-gdp", "JPNRGDPEXP", "Japan Real Gross Domestic Product", "billions of yen"),
-    SeriesDefinition("treasury-10y", "IRLTLT01JPM156N", "Japan 10-Year Government Bond Yield", "percent"),
+    SeriesDefinition("policy-rate", "IRSTCB01JPM156N", "Bank of Japan Central Bank Rate", "percent", "monthly"),
+    SeriesDefinition("cpi", "JPNCPIALLMINMEI", "Japan Consumer Price Index", "index", "monthly"),
+    SeriesDefinition("unemployment-rate", "LRUNTTTTJPM156S", "Japan Unemployment Rate", "percent", "monthly"),
+    SeriesDefinition("real-gdp", "JPNRGDPEXP", "Japan Real Gross Domestic Product", "billions of yen", "quarterly"),
+    SeriesDefinition("treasury-10y", "IRLTLT01JPM156N", "Japan 10-Year Government Bond Yield", "percent", "monthly"),
 )
 
 COUNTRY_SERIES = {"US": US_SERIES, "JP": JAPAN_SERIES}
@@ -76,23 +79,23 @@ def as_decimal(value: str) -> Decimal | None:
         raise ValueError(f"FRED returned a non-numeric value: {value!r}") from error
 
 
-def upsert_series(connection: psycopg.Connection, definition: SeriesDefinition, country_iso2: str) -> int:
+def upsert_series(connection: psycopg.Connection, definition: SeriesDefinition, country_iso2: str) -> object:
     with connection.cursor() as cursor:
         cursor.execute("""
-            insert into source_series (source_id, indicator_id, country_id, external_id, display_name, unit)
-            select sources.id, indicators.id, countries.id, %s, %s, %s
+            insert into source_series (source_id, indicator_id, country_id, external_id, display_name, unit, frequency)
+            select sources.id, indicators.id, countries.id, %s, %s, %s, %s
             from sources, indicators, countries
             where sources.slug = 'fred' and indicators.slug = %s and countries.iso2 = %s
-            on conflict (source_id, country_id, external_id) do update set display_name = excluded.display_name, unit = excluded.unit
+            on conflict (source_id, country_id, external_id) do update set display_name = excluded.display_name, unit = excluded.unit, frequency = excluded.frequency
             returning id
-        """, (definition.fred_series_id, definition.display_name, definition.unit, definition.indicator_slug, country_iso2))
+        """, (definition.fred_series_id, definition.display_name, definition.unit, definition.frequency, definition.indicator_slug, country_iso2))
         row = cursor.fetchone()
         if row is None:
             raise RuntimeError(f"Database bootstrap is incomplete for {definition.indicator_slug}")
         return row[0]
 
 
-def write_observations(connection: psycopg.Connection, source_series_id: int, payload: dict) -> int:
+def write_observations(connection: psycopg.Connection, source_series_id: object, payload: dict) -> int:
     inserted = 0
     with connection.cursor() as cursor:
         for observation in payload.get("observations", []):

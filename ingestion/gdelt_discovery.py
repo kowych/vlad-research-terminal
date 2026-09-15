@@ -18,19 +18,24 @@ from urllib.error import HTTPError
 
 import psycopg
 
-QUERIES = {"global-macro-risk": "(Trump OR White House OR Iran OR Hormuz OR Ukraine OR Russia OR China) (oil OR conflict OR attack OR strike OR sanctions OR semiconductor OR chip OR AI OR technology OR export)"}
+# One deliberately broad, low-frequency request is safer than many country
+# queries against GDELT's shared public endpoint.  Country assignment happens
+# after ingestion in classify_news.py, where cross-border transmission is also
+# explicit and auditable.
+QUERIES = {
+    "global-macro-risk": "(Trump OR \"White House\" OR Iran OR Hormuz OR Ukraine OR Russia OR China) (oil OR energy OR conflict OR attack OR strike OR sanctions OR tariff OR trade OR semiconductor OR chip OR AI OR technology OR export OR nuclear)"
+}
 
 
-def fetch(query: str, hours: int) -> list[dict[str, object]]:
-    params = urlencode({"query": query, "mode": "artlist", "format": "json", "maxrecords": 25, "timespan": f"{hours}h", "format": "json"})
+def fetch(query: str, hours: int, limit: int) -> list[dict[str, object]]:
+    params = urlencode({"query": query, "mode": "artlist", "format": "json", "maxrecords": limit, "timespan": f"{hours}h"})
     url = f"https://api.gdeltproject.org/api/v2/doc/doc?{params}"
     try:
         with urlopen(Request(url, headers={"User-Agent": "Muklanovich-Research/0.1 (discovery metadata only)"}), timeout=30) as response:
             payload = json.loads(response.read())
     except HTTPError as error:
         if error.code == 429:
-            print("GDELT rate limit reached; keeping prior evidence and retrying on the next scheduled run.")
-            return []
+            raise RuntimeError("GDELT public-endpoint rate limit (HTTP 429); no data was imported and the next scheduled run should retry.") from error
         raise
     return payload.get("articles", []) if isinstance(payload, dict) else []
 
@@ -44,7 +49,9 @@ def occurred_at(value: object) -> datetime:
     return datetime.now(UTC)
 
 
-def run(database_url: str, hours: int) -> None:
+def run(database_url: str, hours: int, limit: int, theme: str) -> None:
+    if theme not in QUERIES:
+        raise ValueError(f"Unknown theme: {theme}. Choose one of: {', '.join(QUERIES)}")
     with psycopg.connect(database_url) as connection:
         with connection.cursor() as cursor:
             cursor.execute("select id::text from sources where slug = 'gdelt-discovery'")
@@ -52,9 +59,14 @@ def run(database_url: str, hours: int) -> None:
             if not row:
                 raise RuntimeError("Apply database/migrations/013_news_source_expansion.sql first.")
             source_id = row[0]
+            cursor.execute("insert into ingestion_runs (source_id, status) values (%s, 'started') returning id", (source_id,))
+            run_id = cursor.fetchone()[0]
+        connection.commit()
         written = 0
-        for theme, query in QUERIES.items():
-            for article in fetch(query, hours):
+        read = 0
+        try:
+            for article in fetch(QUERIES[theme], hours, limit):
+                read += 1
                 url = article.get("url")
                 title = article.get("title")
                 if not isinstance(url, str) or not isinstance(title, str):
@@ -72,15 +84,25 @@ def run(database_url: str, hours: int) -> None:
                         continue
                     cursor.execute("insert into news_articles (raw_document_id, headline, language_code, published_at) values (%s, %s, %s, %s)", (raw[0], title, article.get("language"), occurred_at(article.get("seendate"))))
                     written += 1
+            with connection.cursor() as cursor:
+                cursor.execute("update ingestion_runs set status = 'completed', completed_at = now(), records_read = %s, records_written = %s where id = %s", (read, written, run_id))
             connection.commit()
-    print(f"Imported {written} GDELT discovery records from the last {hours} hours")
+        except Exception as error:
+            connection.rollback()
+            with connection.cursor() as cursor:
+                cursor.execute("update ingestion_runs set status = 'failed', completed_at = now(), error_message = %s where id = %s", (str(error), run_id))
+            connection.commit()
+            raise
+    print(f"Imported {written} GDELT discovery records ({theme}, last {hours} hours)")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--hours", type=int, default=24, help="Lookback window in hours; default: 24")
+    parser.add_argument("--limit", type=int, default=25, help="Maximum GDELT records per request; default: 25")
+    parser.add_argument("--theme", choices=sorted(QUERIES), default="global-macro-risk", help="One theme per run to respect public rate limits")
     args = parser.parse_args()
     database_url = os.environ.get("DATABASE_URL")
     if not database_url:
         sys.exit("DATABASE_URL must be set. See ingestion/.env.example.")
-    run(database_url, args.hours)
+    run(database_url, args.hours, args.limit, args.theme)

@@ -45,23 +45,18 @@ export type CountryDeskStatus = "live" | "partial" | "planned";
 
 export const countryDeskStatus: Record<string, CountryDeskStatus> = {
   US: "live",
+  AU: "live",
+  FR: "live",
+  DE: "live",
+  IT: "live",
+  ES: "live",
   JP: "partial",
-  IR: "partial", GB: "partial", FR: "partial", DE: "partial", UA: "partial",
-  RU: "partial", AU: "partial", CA: "partial", NZ: "partial", CN: "partial",
-  IT: "partial", ES: "partial", CH: "partial", NO: "partial", SE: "partial", TR: "partial", IN: "partial", KR: "partial",
+  IR: "partial", GB: "partial", UA: "partial",
+  RU: "partial", CA: "partial", NZ: "partial", CN: "partial",
+  CH: "partial", NO: "partial", SE: "partial", TR: "partial", IN: "partial", KR: "partial",
   PL: "partial",
 };
 
 export function getCountryDeskStatus(iso2: string): CountryDeskStatus {
   return countryDeskStatus[iso2] ?? "planned";
 }
-
-export const sourceRegistry = [
-  { name: "National statistics offices", role: "PRIMARY", use: "National releases for CPI, labour, GDP, trade and production." },
-  { name: "Central banks", role: "PRIMARY", use: "Policy rates, statements, balance sheets and official FX data." },
-  { name: "IMF SDMX", role: "INTERNATIONAL", use: "Cross-country comparable macroeconomic series." },
-  { name: "World Bank WDI", role: "INTERNATIONAL", use: "Structural and development indicators." },
-  { name: "FRED / ALFRED", role: "PRIMARY", use: "US data and vintage-aware macro research." },
-  { name: "Wikidata", role: "BOOTSTRAP", use: "Seeded, attributable structural facts only; never a live macro source." },
-  { name: "GDELT", role: "DISCOVERY", use: "Event and news discovery; material claims require a linked original source." },
-] as const;

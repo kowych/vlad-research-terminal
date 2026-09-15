@@ -30,11 +30,22 @@ insert into sources (slug, name, tier, source_type, base_url, license_note) valu
   ('boj', 'Bank of Japan Time-Series Data Search', 1, 'official', 'https://www.stat-search.boj.or.jp/', 'Official Bank of Japan time-series API'),
   ('bank-of-england', 'Bank of England Statistical Database', 1, 'official', 'https://www.bankofengland.co.uk/boeapps/database/', 'Official Bank of England statistical time-series database'),
   ('ecb-data-portal', 'ECB Data Portal', 1, 'official', 'https://data.ecb.europa.eu/', 'Official ECB SDMX data service'),
+  ('eurostat-data', 'Eurostat Data API', 1, 'official', 'https://ec.europa.eu/eurostat/api/dissemination/', 'Official European statistics API. National observations retain dataset, query and Eurostat update vintage.'),
   ('federal-reserve-board', 'Board of Governors of the Federal Reserve System', 1, 'official', 'https://www.federalreserve.gov/', 'Official Federal Reserve Board communications'),
   ('ecb-communications', 'European Central Bank Communications', 1, 'official', 'https://www.ecb.europa.eu/', 'Official ECB press and statistical releases'),
   ('bank-of-canada-communications', 'Bank of Canada Communications', 1, 'official', 'https://www.bankofcanada.ca/', 'Official press releases and speeches; metadata-only RSS ingestion.'),
   ('reserve-bank-australia-communications', 'Reserve Bank of Australia Communications', 1, 'official', 'https://www.rba.gov.au/', 'Official media releases and speeches; metadata-only RSS ingestion.'),
+  ('reserve-bank-australia-data', 'Reserve Bank of Australia Statistical Tables', 1, 'official', 'https://www.rba.gov.au/statistics/tables/', 'Official RBA statistical-table CSV files. Individual observations retain the table publication date and series identifier.'),
+  ('eu-council-communications', 'Council of the European Union Communications', 1, 'official', 'https://www.consilium.europa.eu/', 'Official Council and European Council press releases; metadata-only RSS ingestion.'),
   ('gdelt-discovery', 'GDELT Discovery Monitor', 4, 'news', 'https://www.gdeltproject.org/', 'Discovery only; preserve and display the original publisher URL. Never use as sole support for a published claim.'),
+  ('alpha-vantage-market-news', 'Alpha Vantage Market News & Sentiment', 3, 'market', 'https://www.alphavantage.co/', 'Provider-authorised metadata only; retain the original publisher URL and do not store article body text.'),
+  ('us-eia-energy', 'U.S. Energy Information Administration', 1, 'official', 'https://www.eia.gov/', 'Official EIA RSS metadata only; preserve original links and do not fetch article pages.'),
+  ('bbc-news-local', 'BBC News · World & Business', 3, 'news', 'https://www.bbc.co.uk/news/', 'LOCAL-ONLY: publisher RSS metadata (headline, supplied summary and original URL). Obtain BBC permission before any public or commercial deployment.'),
+  ('businessquant-us-calendar', 'BusinessQuant US Economic Calendar', 3, 'market', 'https://data.businessquant.com/', 'Provider-authorised US calendar metadata; preserve provider provenance and do not infer release times when only a date is supplied.'),
+  ('federal-reserve-fomc-calendar', 'Federal Reserve · FOMC Calendar', 1, 'official', 'https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm', 'Official FOMC meeting schedule and policy-decision calendar.'),
+  ('bank-of-japan-policy-calendar', 'Bank of Japan · Monetary Policy Meeting Calendar', 1, 'official', 'https://www.boj.or.jp/en/mopo/mpmsche_minu/index.htm', 'Official BOJ Monetary Policy Meeting schedule. Meeting end date is recorded; do not infer a release time when BOJ has not confirmed one.'),
+  ('reserve-bank-australia-policy-calendar', 'Reserve Bank of Australia · Monetary Policy Board Calendar', 1, 'official', 'https://www.rba.gov.au/schedules-events/board-meeting-schedules.html', 'Official RBA Monetary Policy Board meeting schedule. Meeting end date is recorded; do not infer a decision time from the schedule alone.'),
+  ('reserve-bank-new-zealand-policy-calendar', 'Reserve Bank of New Zealand · OCR Decision Calendar', 1, 'official', 'https://www.rbnz.govt.nz/news-and-events/how-we-release-information/ocr-decision-dates-and-financial-stability-report-dates-to-feb-2028', 'Official RBNZ OCR decision schedule. Current bootstrap dates are captured from the public schedule; refresh against the source before its published horizon expires.'),
   ('trading-economics-calendar', 'Trading Economics Economic Calendar', 3, 'market', 'https://api.tradingeconomics.com/', 'Licensed API required; preserve the linked official source where supplied.'),
   ('wikidata', 'Wikidata', 4, 'bootstrap', 'https://www.wikidata.org/', 'CC0; structural seed facts only'),
   ('world-bank-wdi', 'World Bank World Development Indicators', 2, 'international', 'https://api.worldbank.org/', 'Cross-country structural series'),
@@ -52,6 +63,11 @@ from sources join (values
   ,('bank-of-canada-communications', 'Bank of Canada · Speeches & Appearances', 'https://www.bankofcanada.ca/content_type/speeches/feed/')
   ,('reserve-bank-australia-communications', 'RBA · Media Releases', 'https://www.rba.gov.au/rss/rss-cb-media-releases.xml')
   ,('reserve-bank-australia-communications', 'RBA · Speeches', 'https://www.rba.gov.au/rss/rss-cb-speeches.xml')
+  ,('eu-council-communications', 'Council of the EU · Press Releases', 'https://www.consilium.europa.eu/en/rss/pressreleases.ashx')
+  ,('us-eia-energy', 'EIA · Today in Energy', 'https://www.eia.gov/rss/todayinenergy.xml')
+  ,('us-eia-energy', 'EIA · Press Releases', 'https://www.eia.gov/rss/press_rss.xml')
+  ,('bbc-news-local', 'BBC News · World', 'https://feeds.bbci.co.uk/news/world/rss.xml')
+  ,('bbc-news-local', 'BBC News · Business', 'https://feeds.bbci.co.uk/news/business/rss.xml')
 ) as feeds(source_slug, name, feed_url) on sources.slug = feeds.source_slug
 on conflict (feed_url) do update set name = excluded.name, content_policy = excluded.content_policy;
 

@@ -1,4 +1,4 @@
-"""Ingest the ECB main refinancing operations rate for France and Germany."""
+"""Ingest the ECB main refinancing operations rate for priority euro-area desks."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ from urllib.request import Request, urlopen
 import psycopg
 
 ECB_DATA_URL = "https://data-api.ecb.europa.eu/service/data/FM/B.U2.EUR.4F.KR.MRR_FR.LEV"
-COUNTRIES = ("FR", "DE")
+COUNTRIES = ("FR", "DE", "IT", "ES")
 SERIES = {
     "indicator_slug": "policy-rate",
     "external_id": "FM.B.U2.EUR.4F.KR.MRR_FR.LEV",
@@ -49,10 +49,10 @@ def run(database_url: str, start_period: str) -> None:
                 cursor.execute("insert into ingestion_runs (source_id, status) select id, 'started' from sources where slug = 'ecb-data-portal' returning id")
                 run_id = cursor.fetchone()[0]
                 cursor.execute("""
-                  insert into source_series (source_id, indicator_id, country_id, external_id, display_name, unit)
-                  select sources.id, indicators.id, countries.id, %s, %s, %s from sources, indicators, countries
+                  insert into source_series (source_id, indicator_id, country_id, external_id, display_name, unit, frequency)
+                  select sources.id, indicators.id, countries.id, %s, %s, %s, 'daily' from sources, indicators, countries
                   where sources.slug = 'ecb-data-portal' and indicators.slug = %s and countries.iso2 = %s
-                  on conflict (source_id, country_id, external_id) do update set display_name = excluded.display_name, unit = excluded.unit
+                  on conflict (source_id, country_id, external_id) do update set display_name = excluded.display_name, unit = excluded.unit, frequency = excluded.frequency
                   returning id
                 """, (SERIES["external_id"], SERIES["display_name"], SERIES["unit"], SERIES["indicator_slug"], country_iso2))
                 source_series_id = cursor.fetchone()[0]

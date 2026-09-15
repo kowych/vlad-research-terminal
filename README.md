@@ -5,6 +5,7 @@ An independent research desk for macroeconomics, markets and quantitative analys
 ## Local development
 
 ```bash
+npm ci
 npm run dev
 ```
 
@@ -40,8 +41,46 @@ This is intentionally local and dependency-free. Once publishing needs exceed a 
 
 ## Macro data platform
 
-The initial country registry is in `data/countries.ts`. It drives the Macro table today and will drive the globe markers later. The scalable PostgreSQL model and source rules are documented in `database/`.
+The country registry lives in `data/countries.ts` and drives the interactive globe, country routes and coverage status. PostgreSQL is the system of record for macro observations, events and the forward calendar; the schema and source rules are in `database/`.
 
-For the live United States desk, copy `.env.local.example` to `.env.local`. This connection string is server-only; do not use a `NEXT_PUBLIC_` prefix.
+```bash
+docker compose up -d postgres
+cp .env.local.example .env.local
+python3 -m venv .venv
+.venv/bin/pip install -r ingestion/requirements.txt
+cp ingestion/.env.example ingestion/.env
+```
 
-Live country desks use the dynamic `/macro/[country]` route. `/macro/us` is currently published. Japan raw data has been ingested for connector validation but is deliberately withheld from the live desk because the selected FRED series are stale; add a current primary-source connector and pass freshness validation before publishing it.
+`DATABASE_URL` is server-only; do not use a `NEXT_PUBLIC_` prefix. The United States, Australia, France, Germany, Italy and Spain currently meet the complete six-metric live standard. The remaining desks are intentionally shown as partial, delayed or missing in the **Six-Metric Coverage** dashboard at `/macro`; each status includes its source, cadence, reference period and reason. No annual World Bank baseline is presented as a current macro release.
+
+## Data updates
+
+Run the source-specific macro workers when their official data updates. For news and the US calendar, use the safe orchestration command below after setting the connector keys in `ingestion/.env`:
+
+```bash
+set -a; source ingestion/.env; set +a
+.venv/bin/python ingestion/run_news_pipeline.py
+```
+
+The runner always preserves source health. Optional free-tier providers such as Alpha Vantage and BusinessQuant cannot block the official-feed, classification, threading, FOMC or Bank of England calendar steps.
+
+For the high-frequency macro desks, run the source workers separately:
+
+```bash
+set -a; source ingestion/.env; set +a
+.venv/bin/python ingestion/fred_us.py --country US
+.venv/bin/python ingestion/rba_macro.py
+.venv/bin/python ingestion/ecb_euro_area.py
+.venv/bin/python ingestion/eurostat_country_metrics.py
+```
+
+The RBA, ECB and Eurostat workers consume public official data; they require only `DATABASE_URL`. The FRED worker additionally requires `FRED_API_KEY`.
+
+## Verification
+
+```bash
+npx tsc --noEmit
+npm run lint
+npm run build -- --webpack
+git diff --check
+```
