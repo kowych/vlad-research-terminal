@@ -40,6 +40,8 @@ insert into sources (slug, name, tier, source_type, base_url, license_note) valu
   ('gdelt-discovery', 'GDELT Discovery Monitor', 4, 'news', 'https://www.gdeltproject.org/', 'Discovery only; preserve and display the original publisher URL. Never use as sole support for a published claim.'),
   ('alpha-vantage-market-news', 'Alpha Vantage Market News & Sentiment', 3, 'market', 'https://www.alphavantage.co/', 'Provider-authorised metadata only; retain the original publisher URL and do not store article body text.'),
   ('us-eia-energy', 'U.S. Energy Information Administration', 1, 'official', 'https://www.eia.gov/', 'Official EIA RSS metadata only; preserve original links and do not fetch article pages.'),
+  ('iaea-news', 'International Atomic Energy Agency', 1, 'official', 'https://www.iaea.org/', 'Official IAEA RSS metadata only; retain the original item URL and do not fetch article pages.'),
+  ('federal-register-risk', 'Federal Register · U.S. Policy & Export Controls', 1, 'official', 'https://www.federalregister.gov/', 'Official Federal Register API metadata for Executive Orders and Bureau of Industry and Security notices; public API, no key required.'),
   ('bbc-news-local', 'BBC News · World & Business', 3, 'news', 'https://www.bbc.co.uk/news/', 'LOCAL-ONLY: publisher RSS metadata (headline, supplied summary and original URL). Obtain BBC permission before any public or commercial deployment.'),
   ('businessquant-us-calendar', 'BusinessQuant US Economic Calendar', 3, 'market', 'https://data.businessquant.com/', 'Provider-authorised US calendar metadata; preserve provider provenance and do not infer release times when only a date is supplied.'),
   ('federal-reserve-fomc-calendar', 'Federal Reserve · FOMC Calendar', 1, 'official', 'https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm', 'Official FOMC meeting schedule and policy-decision calendar.'),
@@ -66,6 +68,7 @@ from sources join (values
   ,('eu-council-communications', 'Council of the EU · Press Releases', 'https://www.consilium.europa.eu/en/rss/pressreleases.ashx')
   ,('us-eia-energy', 'EIA · Today in Energy', 'https://www.eia.gov/rss/todayinenergy.xml')
   ,('us-eia-energy', 'EIA · Press Releases', 'https://www.eia.gov/rss/press_rss.xml')
+  ,('iaea-news', 'IAEA · Top Stories', 'https://www.iaea.org/feeds/news')
   ,('bbc-news-local', 'BBC News · World', 'https://feeds.bbci.co.uk/news/world/rss.xml')
   ,('bbc-news-local', 'BBC News · Business', 'https://feeds.bbci.co.uk/news/business/rss.xml')
 ) as feeds(source_slug, name, feed_url) on sources.slug = feeds.source_slug

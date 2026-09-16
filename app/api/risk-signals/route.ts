@@ -1,5 +1,5 @@
 import { query } from "@/lib/database";
-import type { EventVerification, RiskEvent, RiskTapeResponse } from "@/lib/macro";
+import type { EventRelevance, EventVerification, RiskEvent, RiskTapeResponse } from "@/lib/macro";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,6 +18,7 @@ type RiskEventRow = {
   source_count: number;
   country_iso2: string[];
   verification: EventVerification;
+  relevance: EventRelevance;
 };
 
 export async function GET() {
@@ -41,7 +42,8 @@ export async function GET() {
         when bool_or(sources.source_type = 'official') then 'OFFICIAL'
         when count(distinct sources.id) filter (where sources.slug <> 'gdelt-discovery') >= 2 then 'CORROBORATED'
         else 'UNVERIFIED'
-      end as verification
+      end as verification,
+      case when bool_or(coalesce(scores.market_moving, false)) then 'MARKET_MOVING' else 'RESEARCH_SIGNAL' end as relevance
     from news_event_threads threads
     join news_event_thread_clusters thread_clusters on thread_clusters.thread_id = threads.id
     join news_event_clusters clusters on clusters.id = thread_clusters.cluster_id
@@ -56,7 +58,10 @@ export async function GET() {
     left join news_event_indicators affected_indicators on affected_indicators.event_id = clusters.id
     left join indicators on indicators.id = affected_indicators.indicator_id
     where clusters.status = 'open'
+      and threads.last_occurred_at >= now() - interval '45 days'
+      and threads.last_occurred_at <= now()
     group by threads.id
+    having bool_or(coalesce(scores.research_relevant, false))
     order by threads.last_occurred_at desc
     limit 250
   `);
@@ -75,6 +80,7 @@ export async function GET() {
     indicators: event.indicators ?? [],
     countryIso2: event.country_iso2,
     verification: event.verification,
+    relevance: event.relevance,
   })) satisfies RiskEvent[];
 
   return Response.json({ generatedAt: new Date().toISOString(), events } satisfies RiskTapeResponse, {

@@ -233,9 +233,15 @@ create table news_event_scores (
   freshness smallint not null check (freshness between 1 and 5),
   observed_reaction smallint check (observed_reaction between 1 and 5),
   total_score numeric(4,2) not null check (total_score between 1 and 5),
+  market_moving boolean not null default false,
+  market_moving_reason text,
+  research_relevant boolean not null default false,
+  research_relevance_reason text,
   rationale text not null,
   calculated_at timestamptz not null default now()
 );
+create index news_event_scores_market_moving_idx on news_event_scores (market_moving) where market_moving;
+create index news_event_scores_research_relevant_idx on news_event_scores (research_relevant) where research_relevant;
 
 -- Immutable measured reaction, distinct from a hypothesis about direction.
 create table news_event_market_reactions (

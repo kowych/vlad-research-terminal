@@ -59,6 +59,13 @@ them direct to the United States first, then adds any named country from the
 item metadata; explicit Iran, Russia–Ukraine and China-technology rules add
 their documented regional and spillover relationships.
 
+The International Atomic Energy Agency RSS feed is a tier-1 primary layer for
+nuclear-safety context, including Ukraine and Iran when the publisher metadata
+names them. `federal_register_risk.py` imports the Federal Register API's
+metadata for Executive Orders and Bureau of Industry and Security notices. It
+requires no key and is the primary U.S. policy, tariffs and export-controls
+layer. Neither source is a substitute for a real-time conflict alert feed.
+
 BBC World and Business RSS are explicitly marked `LOCAL-ONLY` in the source
 registry. They supply a CNN-like international editorial layer for personal
 research and are still ingested as metadata only. Before public deployment,
@@ -94,6 +101,30 @@ source quality, event significance, systemic reach, freshness and—when
 available—observed reaction. It is intentionally auditable rather than a
 single opaque AI score.
 
+## Research-feed policy
+
+The working UI is deliberately narrower than the evidence archive and has two
+explicit relevance tiers. Both require a 45-day window. `MARKET_MOVING` is the
+strict tier:
+
+1. geopolitics with an explicit market-transmission rule;
+2. concrete policy actions, such as tariffs, sanctions, Executive Orders or
+   export controls—not a speech or a political opinion;
+3. China technology/export-control developments; and
+4. named macro releases or rate decisions, excluding explainers.
+
+All other metadata remains locally as auditable provenance but does not appear
+in the research feed. This preserves reproducibility without allowing old
+articles, routine statements or calendar-like notices to dilute the market
+read.
+
+`RESEARCH_SIGNAL` is intentionally broader: relevant geopolitical incidents,
+policy statements, prospective macro growth/inflation/labour developments,
+China technology developments and official energy/trade communications can
+appear before a direct market impact is confirmed. It is visually labelled and
+can be filtered away. Generic commentary, explainers, calendars, cultural news
+and unrelated official communications remain outside both tiers.
+
 ## Scheduled economic calendar
 
 `economic_calendar_events` is a separate, forward-looking evidence layer. A
@@ -119,10 +150,26 @@ It issues one broad query per run and persists public-endpoint failures to
 
 Run `python3 ingestion/run_news_pipeline.py` after loading `ingestion/.env`.
 It performs `RSS/provider ingest → classification → canonical threading` and
-does not make a GDELT request by default. Add `--with-gdelt` only for one
-intentional discovery attempt; a 429 is recorded and does not block publisher
-evidence. Country API responses expose the latest `ingestion_runs` status for
-every active news source as CURRENT, DELAYED, ATTENTION or PENDING.
+does not make a GDELT request by default. It does include a free Federal
+Register primary-source check. Add `--with-gdelt` only for one intentional
+discovery attempt; a 429 is recorded and does not block publisher evidence.
+Country API responses expose the latest `ingestion_runs` status for every
+active news source as CURRENT, DELAYED, ATTENTION or PENDING.
+
+## News coverage matrix
+
+`/macro` exposes the **News Coverage Matrix**. Its domain definitions live in
+`data/newsCoverage.ts`; the API evaluates their requirements from the latest
+`ingestion_runs`, rather than trusting a static source list. A source is
+`CURRENT` only when its latest completed check is no older than 36 hours.
+
+`LIVE` means every configured primary and discovery layer has a current check.
+`PARTIAL` means the primary layer is current but an explicitly required
+secondary layer is not. `GAP` means the primary layer itself is absent or
+stale. This is a coverage contract, not a claim that every world event is
+captured. The matrix deliberately leaves fast social signals and a dedicated
+authorised maritime incident feed as gaps until a permitted source and a named
+watchlist are configured.
 
 ## US economic calendar
 

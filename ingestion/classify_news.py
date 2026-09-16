@@ -42,8 +42,18 @@ TOPIC_RULES: tuple[tuple[str, tuple[str, ...], str], ...] = (
     ("real-gdp-growth", ("gross domestic product", "gdp", "economic growth"), "macro_release"),
     ("sovereign-10y", ("government bond", "sovereign yield", "yield curve", "bond yield"), "market_reaction"),
 )
-CONFLICT_TERMS = ("war", "conflict", "attack", "strike", "military", "missile", "sanction", "blockade", "hormuz")
+CONFLICT_TERMS = ("war", "conflict", "attack", "strike", "military", "missile", "sanction", "blockade", "hormuz", "nuclear", "drone", "seizure")
 CHINA_TECH_TERMS = ("semiconductor", "chip", "artificial intelligence", "ai", "export control", "technology")
+POLICY_ACTION_TERMS = ("executive order", "tariff", "sanction", "export control", "export controls", "export restriction", "import duty", "trade agreement", "trade deal", "entity list", "section 232", "section 301", "national emergency", "policy decision", "restriction", "ban")
+TECHNOLOGY_MARKET_TERMS = ("semiconductor", "chip", "export control", "export controls", "entity list", "restriction", "ban", "tariff", "supply chain", "launch", "release", "developed", "breakthrough")
+MACRO_RELEASE_TERMS = ("consumer price", "cpi", "inflation", "unemployment rate", "nonfarm payroll", "gross domestic product", "gdp", "interest rate decision", "rate decision", "monetary policy decision", "wage growth", "wage tracker", "retail sales", "pmi", "industrial production")
+EXPLAINER_PREFIXES = ("what is", "how does", "how to", "why ", "explained:", "a guide to")
+OFFICIAL_POLICY_ACTION_SOURCES = frozenset({"federal-register-risk", "eu-council-communications"})
+OFFICIAL_MACRO_RELEASE_SOURCES = frozenset({"federal-reserve-board", "ecb-communications", "bank-of-canada-communications", "reserve-bank-australia-communications"})
+PROPOSAL_PREFIXES = ("request for public comments", "notice of proposed", "proposed ")
+RESEARCH_SIGNAL_TERMS = ("oil", "crude", "gas", "lng", "energy", "shipping", "hormuz", "tariff", "sanction", "export", "import", "trade", "customs", "inflation", "cpi", "unemployment", "labour", "labor", "wage", "gdp", "economic growth", "recession", "slowdown", "interest rate", "yield", "bond", "currency", "fiscal", "deficit", "debt", "semiconductor", "chip")
+RESEARCH_SIGNAL_SOURCES = frozenset({"federal-reserve-board", "ecb-communications", "bank-of-canada-communications", "reserve-bank-australia-communications", "eu-council-communications", "us-eia-energy", "federal-register-risk"})
+RESEARCH_MACRO_SOURCES = OFFICIAL_MACRO_RELEASE_SOURCES | frozenset({"bbc-news-local"})
 SOURCE_COUNTRIES = {
     "federal-reserve-board": ("US",),
     "ecb-communications": ("DE", "FR", "IT", "ES"),
@@ -51,6 +61,7 @@ SOURCE_COUNTRIES = {
     "reserve-bank-australia-communications": ("AU",),
     "eu-council-communications": ("DE", "FR", "IT", "ES", "PL"),
     "us-eia-energy": ("US",),
+    "federal-register-risk": ("US",),
 }
 
 
@@ -101,10 +112,11 @@ def classify(article: dict[str, str]) -> tuple[list[CountryImpact], list[str], s
         entities.append(Entity("federal-reserve", "Federal Reserve", "institution", "US", "policy_maker"))
     if source_slug == "ecb-communications":
         entities.append(Entity("european-central-bank", "European Central Bank", "institution", None, "policy_maker"))
-    if matches(text, ("trump", "white house")):
+    actionable_us_policy = matches(text, POLICY_ACTION_TERMS) and (matches(text, ("trump", "white house")) or source_slug == "federal-register-risk")
+    if actionable_us_policy:
         entities.extend((Entity("donald-trump", "Donald Trump", "person", "US", "actor"), Entity("us-administration", "United States administration", "government", "US", "policy_maker")))
         event_type = "policy_politics"
-        impacts.append(MarketImpact("us-10y", "direct", "ambiguous", "low", "Policy communication requires market confirmation."))
+        impacts.append(MarketImpact("us-10y", "direct", "ambiguous", "medium", "Official policy action may alter fiscal, trade or risk-premium assumptions."))
 
     iran_conflict = matches(text, ("iran", "iranian", "hormuz")) and matches(text, CONFLICT_TERMS)
     if iran_conflict:
@@ -120,7 +132,7 @@ def classify(article: dict[str, str]) -> tuple[list[CountryImpact], list[str], s
         countries.extend((CountryImpact("PL", "regional", "high", "Direct regional security and trade exposure."), CountryImpact("DE", "spillover", "medium", "European energy and industrial exposure."), CountryImpact("FR", "spillover", "medium", "European risk and policy transmission.")))
         impacts.extend((MarketImpact("ttf-natural-gas", "spillover", "up", "medium", "European gas-supply risk."), MarketImpact("brent-crude", "spillover", "ambiguous", "low", "Energy-risk premium depends on disruption.")))
 
-    china_tech = matches(text, ("china", "chinese", "beijing")) and matches(text, CHINA_TECH_TERMS)
+    china_tech = matches(text, ("china", "chinese", "beijing")) and matches(text, CHINA_TECH_TERMS) and matches(text, TECHNOLOGY_MARKET_TERMS)
     if china_tech:
         event_type = "technology_industrial_policy"
         entities.append(Entity("china-technology-policy", "China technology policy", "technology", "CN", "subject"))
@@ -138,7 +150,48 @@ def classify(article: dict[str, str]) -> tuple[list[CountryImpact], list[str], s
 
 
 def source_score(source_slug: str) -> int:
-    return 5 if source_slug in {"federal-reserve-board", "ecb-communications", "bank-of-canada-communications", "reserve-bank-australia-communications", "eu-council-communications", "us-eia-energy"} else 2 if source_slug == "gdelt-discovery" else 3
+    return 5 if source_slug in {"federal-reserve-board", "ecb-communications", "bank-of-canada-communications", "reserve-bank-australia-communications", "eu-council-communications", "us-eia-energy", "iaea-news", "federal-register-risk"} else 2 if source_slug == "gdelt-discovery" else 3
+
+
+def market_moving_decision(article: dict[str, str], event_type: str) -> tuple[bool, str | None]:
+    """Return a narrow, explainable publication decision for the active feed.
+
+    Routine statements, speeches, explainers and schedule notices remain in the
+    local evidence archive but are not eligible for the market-moving UI.
+    """
+    headline = article["headline"].lower().strip()
+    text = f"{headline} {article.get('summary') or ''}".lower()
+    if event_type == "geopolitics_conflict":
+        return True, "Conflict event with explicit cross-market transmission rules."
+    if event_type == "technology_industrial_policy":
+        return True, "China technology or export-control development with supply-chain transmission."
+    if event_type == "policy_politics" and article["source_slug"] in OFFICIAL_POLICY_ACTION_SOURCES and not headline.startswith(PROPOSAL_PREFIXES):
+        return True, "Concrete policy action; routine political commentary is excluded."
+    if event_type == "macro_release" and article["source_slug"] in OFFICIAL_MACRO_RELEASE_SOURCES and not headline.startswith(EXPLAINER_PREFIXES) and matches(text, MACRO_RELEASE_TERMS):
+        return True, "Named macro release or policy decision; explainer coverage is excluded."
+    return False, None
+
+
+def research_signal_decision(article: dict[str, str], event_type: str, market_moving: bool) -> tuple[bool, str | None]:
+    """Keep an intentionally wider research layer without reopening the noise.
+
+    Political statements and prospective macro developments may change a
+    scenario before there is enough evidence to call them market-moving. They
+    remain visibly distinct from the strict market-moving tier in the UI.
+    """
+    if market_moving:
+        return True, "Meets the stricter market-moving publication threshold."
+    headline = article["headline"].lower().strip()
+    text = f"{headline} {article.get('summary') or ''}".lower()
+    if event_type == "geopolitics_conflict":
+        return True, "Geopolitical development with potential cross-market transmission."
+    if event_type in {"policy_politics", "technology_industrial_policy"}:
+        return True, "Policy statement or technology development relevant to active scenarios."
+    if event_type == "macro_release" and article["source_slug"] in RESEARCH_MACRO_SOURCES and not headline.startswith(EXPLAINER_PREFIXES) and matches(text, MACRO_RELEASE_TERMS):
+        return True, "Named macro development retained for directional research, pending market confirmation."
+    if article["source_slug"] in RESEARCH_SIGNAL_SOURCES and matches(text, RESEARCH_SIGNAL_TERMS):
+        return True, "Official energy, trade, policy or macro communication with a defined research channel."
+    return False, None
 
 
 def upsert_entity(cursor: psycopg.Cursor, entity: Entity, country_ids: dict[str, str]) -> str:
@@ -170,7 +223,9 @@ def enrich_event(cursor: psycopg.Cursor, event_id: str, article: dict[str, str],
     policy_decision = matches(text, ("monetary policy decision", "interest rate decision", "rate decision", "fomc statement"))
     systemic = 5 if event_type == "geopolitics_conflict" else 4 if policy_decision or len(countries) >= 3 else 3
     total = round((materiality * 0.60) + (systemic * 0.30) + (quality * 0.10), 2)
-    cursor.execute("""insert into news_event_scores (event_id, source_quality, event_significance, systemic_reach, freshness, total_score, rationale) values (%s, %s, %s, %s, 5, %s, %s) on conflict (event_id) do update set source_quality = excluded.source_quality, event_significance = excluded.event_significance, systemic_reach = excluded.systemic_reach, freshness = excluded.freshness, total_score = excluded.total_score, rationale = excluded.rationale, calculated_at = now()""", (event_id, quality, materiality, systemic, total, "Impact-weighted provisional score: event significance and systemic reach dominate; source quality validates evidence but does not make an event market-moving. Observed reaction is intentionally not yet included."))
+    market_moving, market_moving_reason = market_moving_decision(article, event_type)
+    research_relevant, research_relevance_reason = research_signal_decision(article, event_type, market_moving)
+    cursor.execute("""insert into news_event_scores (event_id, source_quality, event_significance, systemic_reach, freshness, total_score, market_moving, market_moving_reason, research_relevant, research_relevance_reason, rationale) values (%s, %s, %s, %s, 5, %s, %s, %s, %s, %s, %s) on conflict (event_id) do update set source_quality = excluded.source_quality, event_significance = excluded.event_significance, systemic_reach = excluded.systemic_reach, freshness = excluded.freshness, total_score = excluded.total_score, market_moving = excluded.market_moving, market_moving_reason = excluded.market_moving_reason, research_relevant = excluded.research_relevant, research_relevance_reason = excluded.research_relevance_reason, rationale = excluded.rationale, calculated_at = now()""", (event_id, quality, materiality, systemic, total, market_moving, market_moving_reason, research_relevant, research_relevance_reason, "Impact-weighted provisional score: a strict market-moving tier is separated from broader scenario-relevant signals. Routine statements and unrelated headlines remain outside both working feeds; observed reaction is intentionally not yet included."))
 
 
 def run(database_url: str) -> None:

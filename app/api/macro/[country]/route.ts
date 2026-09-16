@@ -1,12 +1,12 @@
 import { query } from "@/lib/database";
 import { countries } from "@/data/countries";
-import type { CalendarEvent, EventVerification, MacroDesk, MacroEvent, MacroPoint, MacroSeries, NewsSourceHealth } from "@/lib/macro";
+import type { CalendarEvent, EventRelevance, EventVerification, MacroDesk, MacroEvent, MacroPoint, MacroSeries, NewsSourceHealth } from "@/lib/macro";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 type SeriesRow = { slug: string; name: string; unit: string; frequency: "daily" | "weekly" | "monthly" | "quarterly" | "annual" | "event"; source_name: string; period_start: string; period_end: string | null; value: string; as_of_date: string; ingested_at: string };
-type EventRow = { id: string; title: string; event_type: string; materiality: number; total_score: string | null; impact_scope: "direct" | "regional" | "spillover"; occurred_at: string; source_name: string; original_url: string; indicators: string[] | null; source_count: number; verification: EventVerification };
+type EventRow = { id: string; title: string; event_type: string; materiality: number; total_score: string | null; impact_scope: "direct" | "regional" | "spillover"; occurred_at: string; source_name: string; original_url: string; indicators: string[] | null; source_count: number; verification: EventVerification; relevance: EventRelevance };
 type CalendarRow = { id: string; title: string; category: string | null; scheduled_at: string; timing_precision: "exact" | "estimated" | "date_only"; importance: number; forecast_text: string | null; previous_text: string | null; currency_code: string | null; source_name: string | null; source_url: string | null };
 type CalendarSourceRow = { name: string };
 type NewsHealthRow = { slug: string; name: string; status: "completed" | "failed" | null; completed_at: string | null; records_written: number | null; error_message: string | null };
@@ -107,7 +107,8 @@ export async function GET(_request: Request, context: RouteContext<"/api/macro/[
         when bool_or(sources.source_type = 'official') then 'OFFICIAL'
         when count(distinct sources.id) filter (where sources.slug <> 'gdelt-discovery') >= 2 then 'CORROBORATED'
         else 'UNVERIFIED'
-      end as verification
+      end as verification,
+      case when bool_or(coalesce(scores.market_moving, false)) then 'MARKET_MOVING' else 'RESEARCH_SIGNAL' end as relevance
     from news_event_threads threads
     join news_event_thread_clusters thread_clusters on thread_clusters.thread_id = threads.id
     join news_event_clusters clusters on clusters.id = thread_clusters.cluster_id
@@ -122,14 +123,17 @@ export async function GET(_request: Request, context: RouteContext<"/api/macro/[
     left join news_event_indicators affected_indicators on affected_indicators.event_id = clusters.id
     left join indicators on indicators.id = affected_indicators.indicator_id
     where event_country.iso2 = $1 and clusters.status = 'open'
+      and threads.last_occurred_at >= now() - interval '45 days'
+      and threads.last_occurred_at <= now()
     group by threads.id
+    having bool_or(coalesce(scores.research_relevant, false))
     order by coalesce(max(scores.total_score), threads.materiality::numeric) desc, threads.last_occurred_at desc nulls last
     -- Filtering happens client-side so every impact and time filter must receive
     -- a sufficiently complete country event window rather than an arbitrary
     -- top-20 slice.
     limit 100
   `, [iso2]);
-  const events = eventRows.map((event) => ({ id: event.id, title: event.title, eventType: event.event_type, materiality: event.materiality, score: event.total_score ? Number(event.total_score) : undefined, impactScope: event.impact_scope, occurredAt: event.occurred_at, sourceName: event.source_name, sourceCount: event.source_count, originalUrl: event.original_url, indicators: event.indicators ?? [], verification: event.verification })) satisfies MacroEvent[];
+  const events = eventRows.map((event) => ({ id: event.id, title: event.title, eventType: event.event_type, materiality: event.materiality, score: event.total_score ? Number(event.total_score) : undefined, impactScope: event.impact_scope, occurredAt: event.occurred_at, sourceName: event.source_name, sourceCount: event.source_count, originalUrl: event.original_url, indicators: event.indicators ?? [], verification: event.verification, relevance: event.relevance })) satisfies MacroEvent[];
   const { rows: calendarRows } = await query<CalendarRow>(`
     select calendar.id::text, calendar.title, calendar.category, calendar.scheduled_at::text, calendar.timing_precision, calendar.importance, calendar.forecast_text, calendar.previous_text, calendar.currency_code, calendar.source_name, calendar.source_url
     from economic_calendar_events calendar
@@ -161,7 +165,7 @@ export async function GET(_request: Request, context: RouteContext<"/api/macro/[
     ) latest on true
     where sources.active
       and (exists (select 1 from news_feeds where news_feeds.source_id = sources.id and news_feeds.active)
-        or sources.slug in ('alpha-vantage-market-news', 'gdelt-discovery', 'businessquant-us-calendar', 'federal-reserve-fomc-calendar', 'bank-of-england'))
+        or sources.slug in ('alpha-vantage-market-news', 'gdelt-discovery', 'federal-register-risk', 'businessquant-us-calendar', 'federal-reserve-fomc-calendar', 'bank-of-england'))
     order by sources.name
   `);
   const newsHealth = healthRows.map(toNewsHealth);

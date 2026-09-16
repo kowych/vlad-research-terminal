@@ -12,6 +12,7 @@ export type MacroSeries = {
   points: MacroPoint[];
 };
 export type EventVerification = "UNVERIFIED" | "CORROBORATED" | "OFFICIAL" | "MARKET_CONFIRMED";
+export type EventRelevance = "MARKET_MOVING" | "RESEARCH_SIGNAL";
 export type MacroEvent = {
   id: string;
   title: string;
@@ -25,6 +26,7 @@ export type MacroEvent = {
   originalUrl: string;
   indicators: string[];
   verification: EventVerification;
+  relevance: EventRelevance;
 };
 export type RiskEvent = MacroEvent & { countryIso2: string[] };
 export type RiskTapeResponse = { generatedAt: string; events: RiskEvent[] };

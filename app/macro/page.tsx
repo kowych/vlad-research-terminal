@@ -3,6 +3,7 @@ import CoverageDashboard from "@/components/CoverageDashboard";
 import GlobalMacroCalendar from "@/components/GlobalMacroCalendar";
 import MacroGlobe from "@/components/MacroGlobe";
 import GlobalRiskTape from "@/components/GlobalRiskTape";
+import NewsCoverageMatrix from "@/components/NewsCoverageMatrix";
 
 export const metadata = { title: "Macro" };
 
@@ -17,6 +18,7 @@ export default function MacroPage() {
     <MacroGlobe />
     <GlobalRiskTape />
     <GlobalMacroCalendar />
+    <NewsCoverageMatrix />
     <CoverageDashboard />
   </section>;
 }

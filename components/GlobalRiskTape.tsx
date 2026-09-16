@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { countries } from "@/data/countries";
-import type { EventVerification, RiskEvent, RiskTapeResponse } from "@/lib/macro";
+import type { EventRelevance, EventVerification, RiskEvent, RiskTapeResponse } from "@/lib/macro";
 
 const REFRESH_MS = 5 * 60_000;
 const verificationOrder: Record<EventVerification, number> = {
@@ -11,12 +11,14 @@ const verificationOrder: Record<EventVerification, number> = {
   CORROBORATED: 2,
   UNVERIFIED: 1,
 };
+const relevanceOrder: Record<EventRelevance, number> = { MARKET_MOVING: 2, RESEARCH_SIGNAL: 1 };
 const verificationLabels: Record<EventVerification, string> = {
   MARKET_CONFIRMED: "MARKET CONFIRMED",
   OFFICIAL: "OFFICIAL",
   CORROBORATED: "CORROBORATED",
   UNVERIFIED: "SIGNAL · UNVERIFIED",
 };
+const relevanceLabels: Record<EventRelevance, string> = { MARKET_MOVING: "MARKET MOVING", RESEARCH_SIGNAL: "RESEARCH SIGNAL" };
 const periods = [
   { value: "day", label: "DAY", duration: 86_400_000 },
   { value: "week", label: "WEEK", duration: 7 * 86_400_000 },
@@ -33,6 +35,7 @@ function formatCountries(event: RiskEvent) {
 export default function GlobalRiskTape() {
   const [tape, setTape] = useState<RiskTapeResponse>();
   const [error, setError] = useState<string>();
+  const [relevance, setRelevance] = useState<"all" | EventRelevance>("all");
   const [verification, setVerification] = useState<"all" | EventVerification>("all");
   const [period, setPeriod] = useState<(typeof periods)[number]["value"]>("week");
 
@@ -69,15 +72,24 @@ export default function GlobalRiskTape() {
         return Number.isFinite(occurredAt)
           && occurredAt <= reference
           && occurredAt >= reference - duration
+          && (relevance === "all" || event.relevance === relevance)
           && (verification === "all" || event.verification === verification);
       })
       .sort((left, right) => {
+        const relevanceDifference = relevanceOrder[right.relevance] - relevanceOrder[left.relevance];
+        if (relevanceDifference) return relevanceDifference;
         const verificationDifference = verificationOrder[right.verification] - verificationOrder[left.verification];
         if (verificationDifference) return verificationDifference;
         const scoreDifference = (right.score ?? right.materiality) - (left.score ?? left.materiality);
         return scoreDifference || Date.parse(right.occurredAt) - Date.parse(left.occurredAt);
       });
-  }, [period, tape, verification]);
+  }, [period, relevance, tape, verification]);
+
+  const relevanceFilters: { value: "all" | EventRelevance; label: string }[] = [
+    { value: "all", label: "ALL RESEARCH" },
+    { value: "MARKET_MOVING", label: "MARKET MOVING" },
+    { value: "RESEARCH_SIGNAL", label: "RESEARCH SIGNALS" },
+  ];
 
   const filters: { value: "all" | EventVerification; label: string }[] = [
     { value: "all", label: "ALL" },
@@ -89,12 +101,15 @@ export default function GlobalRiskTape() {
 
   return <section className="risk-tape">
     <div className="section-label">
-      <span>GEOPOLITICAL & POLICY RISK</span>
-      <h2>GLOBAL RISK TAPE</h2>
+      <span>GEOPOLITICAL, POLICY & MACRO</span>
+      <h2>GLOBAL RESEARCH TAPE</h2>
       <span>{tape ? `${visible.length} EVENT${visible.length === 1 ? "" : "S"} · ${period.toUpperCase()}` : "LOADING"}</span>
     </div>
-    <p className="risk-tape-intro">Unverified signals remain visible for early research. They are not evidence of a market move and cannot enter an AI conclusion without corroboration.</p>
+    <p className="risk-tape-intro">Market-moving events are prioritised. Research signals retain geopolitics, policy statements and macro developments that may change a scenario before their market impact is confirmed.</p>
     <div className="risk-tape-controls">
+      <div className="evidence-filters" aria-label="Filter research relevance">
+        {relevanceFilters.map((item) => <button type="button" key={item.value} className={relevance === item.value ? "is-active" : ""} onClick={() => setRelevance(item.value)}>{item.label}</button>)}
+      </div>
       <div className="evidence-filters" aria-label="Filter risk signal verification">
         {filters.map((item) => <button type="button" key={item.value} className={verification === item.value ? "is-active" : ""} onClick={() => setVerification(item.value)}>{item.label}</button>)}
       </div>
@@ -110,6 +125,7 @@ export default function GlobalRiskTape() {
           <h3>{event.title}</h3>
         </div>
         <div>
+          <span className={`risk-relevance relevance-${event.relevance.toLowerCase().replaceAll("_", "-")}`}>{relevanceLabels[event.relevance]}</span>
           <span className={`risk-verification risk-${event.verification.toLowerCase().replaceAll("_", "-")}`}>{verificationLabels[event.verification]}</span>
           <span>{formatCountries(event) || "GLOBAL"}</span>
           <span>{event.impactScope} · S{(event.score ?? event.materiality).toFixed(1)}</span>

@@ -78,6 +78,7 @@ export default function GlobalMacroCalendar() {
   // read compact; lower-importance releases remain one click away under ALL.
   const [impact, setImpact] = useState<ImpactFilter>("market-moving");
   const [country, setCountry] = useState("all");
+  const [collapsedDays, setCollapsedDays] = useState<Set<string>>(() => new Set());
 
   useEffect(() => {
     let active = true;
@@ -137,6 +138,15 @@ export default function GlobalMacroCalendar() {
     return [...grouped.entries()];
   }, [visible]);
 
+  const toggleDay = (day: string) => {
+    setCollapsedDays((current) => {
+      const next = new Set(current);
+      if (next.has(day)) next.delete(day);
+      else next.add(day);
+      return next;
+    });
+  };
+
   return <section className="global-calendar">
     <div className="section-label">
       <span>02 · GLOBAL VIEW</span>
@@ -165,10 +175,15 @@ export default function GlobalMacroCalendar() {
       {!calendar && <p className="evidence-empty">LOADING UPCOMING RELEASES…</p>}
       {calendar && !visible.length && <p className="evidence-empty">NO EVENTS MATCH THIS FILTER FOR THE SELECTED PERIOD.</p>}
       {days.length > 0 && <div className="calendar-list global-calendar-list">
-        {days.map(([day, events]) => <section className="calendar-day" key={day}>
-          <header><span>{formatDay(day)}</span><span>{events.length} EVENT{events.length === 1 ? "" : "S"}</span></header>
-          <div>{events.map((event) => <CalendarEventRow key={event.id} event={event} />)}</div>
-        </section>)}
+        {days.map(([day, events]) => {
+          const collapsed = collapsedDays.has(day);
+          return <section className="calendar-day" key={day}>
+            <button type="button" className="calendar-day-header" aria-expanded={!collapsed} onClick={() => toggleDay(day)}>
+              <span>{formatDay(day)}</span><span>{events.length} EVENT{events.length === 1 ? "" : "S"} <i aria-hidden="true">{collapsed ? "+" : "−"}</i></span>
+            </button>
+            {!collapsed && <div>{events.map((event) => <CalendarEventRow key={event.id} event={event} />)}</div>}
+          </section>;
+        })}
       </div>}
     </>}
   </section>;

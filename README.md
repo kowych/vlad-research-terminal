@@ -53,6 +53,19 @@ cp ingestion/.env.example ingestion/.env
 
 `DATABASE_URL` is server-only; do not use a `NEXT_PUBLIC_` prefix. The United States, Australia, France, Germany, Italy and Spain currently meet the complete six-metric live standard. The remaining desks are intentionally shown as partial, delayed or missing in the **Six-Metric Coverage** dashboard at `/macro`; each status includes its source, cadence, reference period and reason. No annual World Bank baseline is presented as a current macro release.
 
+For an existing local database, apply each new SQL migration through the
+PostgreSQL container before running its corresponding worker. For the current
+news coverage expansion:
+
+```bash
+docker compose exec -T postgres psql -U research -d muklanovich_research \
+  -v ON_ERROR_STOP=1 -f /dev/stdin < database/migrations/025_news_coverage_primary_sources.sql
+docker compose exec -T postgres psql -U research -d muklanovich_research \
+  -v ON_ERROR_STOP=1 -f /dev/stdin < database/migrations/026_market_moving_news_filter.sql
+docker compose exec -T postgres psql -U research -d muklanovich_research \
+  -v ON_ERROR_STOP=1 -f /dev/stdin < database/migrations/027_research_signal_news_feed.sql
+```
+
 ## Data updates
 
 Run the source-specific macro workers when their official data updates. For news and the US calendar, use the safe orchestration command below after setting the connector keys in `ingestion/.env`:
@@ -61,6 +74,11 @@ Run the source-specific macro workers when their official data updates. For news
 set -a; source ingestion/.env; set +a
 .venv/bin/python ingestion/run_news_pipeline.py
 ```
+
+The runner now includes two free primary sources: IAEA RSS and Federal
+Register Executive Order/BIS export-control metadata. The `/macro` **News
+Coverage Matrix** evaluates current source checks by risk domain; it exposes
+partial coverage and gaps rather than treating a configured source as live.
 
 The runner always preserves source health. Optional free-tier providers such as Alpha Vantage and BusinessQuant cannot block the official-feed, classification, threading, FOMC or Bank of England calendar steps.
 

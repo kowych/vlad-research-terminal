@@ -35,6 +35,8 @@ def main() -> None:
         print("Alpha Vantage did not complete; continuing with source-health visibility.")
     if args.with_gdelt and not run_worker("gdelt_discovery.py", required=False):
         print("GDELT did not complete; continuing with publisher evidence already collected.")
+    if not run_worker("federal_register_risk.py", required=False):
+        print("Federal Register risk monitor did not complete; existing publisher evidence remains available.")
     run_worker("classify_news.py")
     run_worker("thread_news_events.py")
     run_worker("fomc_calendar.py")
