@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { feature } from "topojson-client";
 import { MeshPhongMaterial } from "three";
@@ -10,6 +10,7 @@ import worldAtlas from "world-atlas/countries-110m.json";
 import { countries, getCountryDeskStatus } from "@/data/countries";
 
 const Globe = dynamic(() => import("react-globe.gl"), { ssr: false });
+const GLOBE_INTRO_DURATION_MS = 1_200;
 
 const numericIsoToIso2: Record<string, string> = {
   "036": "AU", "124": "CA", "156": "CN", "250": "FR", "276": "DE", "364": "IR",
@@ -71,6 +72,16 @@ export default function MacroGlobe() {
     return getCountryDeskStatus(iso2) === "live" ? (theme === "light" ? "rgba(24, 24, 27, 0.58)" : "rgba(244, 244, 245, 0.58)") : (theme === "light" ? "rgba(82, 82, 91, 0.32)" : "rgba(161, 161, 170, 0.30)");
   };
   const openCountry = (iso2?: string) => { if (iso2 && countryByIso2.has(iso2)) router.push(`/macro/${iso2.toLowerCase()}`); };
+  const setInitialView = useCallback(() => {
+    // `onGlobeReady` is raised while the underlying instance is mounting.
+    // Deferring one frame guarantees the imperative ref and OrbitControls are
+    // both available before the initial camera view is applied.
+    requestAnimationFrame(() => globeRef.current?.pointOfView(INITIAL_GLOBE_VIEW, 0));
+    // Globe's built-in intro rotates the scene for 1.2 seconds. Reassert the
+    // camera target once it completes so the animation cannot leave the
+    // globe facing its library default view.
+    window.setTimeout(() => globeRef.current?.pointOfView(INITIAL_GLOBE_VIEW, 0), GLOBE_INTRO_DURATION_MS);
+  }, []);
   return <section className="macro-globe-section">
     <div className="macro-globe-intro"><div><p className="globe-kicker">01 · INTERACTIVE MACRO MAP</p><h2>Macro globe</h2></div><p>Drag to rotate.</p></div>
     <div className="macro-globe-frame" ref={frameRef}>
@@ -81,7 +92,8 @@ export default function MacroGlobe() {
         globeOffset={[0, Math.round(frameSize.height * GLOBE_VERTICAL_OFFSET_RATIO)]}
         backgroundColor="rgba(0,0,0,0)"
         globeMaterial={globeMaterial}
-        onGlobeReady={() => globeRef.current?.pointOfView(INITIAL_GLOBE_VIEW, 0)}
+        animateIn
+        onGlobeReady={setInitialView}
         showAtmosphere
         atmosphereColor={theme === "light" ? "#71717a" : "#a1a1aa"}
         atmosphereAltitude={0.11}

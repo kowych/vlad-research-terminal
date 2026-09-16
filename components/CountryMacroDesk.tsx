@@ -7,6 +7,8 @@ import { topMetrics, type MetricDefinition } from "@/data/metrics";
 function formatValue(value: number, unit: string) {
   if (unit === "percent") return `${value.toFixed(2)}%`;
   if (unit === "index") return value.toFixed(1);
+  if (unit === "USD per local currency") return `$${value.toFixed(value < 0.01 ? 6 : 4)}`;
+  if (unit === "local currency per USD") return value.toFixed(value >= 100 ? 2 : 4);
   if (unit === "bn USD") return `$${value.toLocaleString(undefined, { maximumFractionDigits: 0 })}bn`;
   if (unit.includes("billions")) return `${value.toLocaleString(undefined, { maximumFractionDigits: 0 })} ${unit.replace("billions of ", "bn ")}`;
   return value.toLocaleString(undefined, { maximumFractionDigits: 0 });
@@ -27,8 +29,13 @@ function Sparkline({ points }: { points: MacroPoint[] }) {
   const path = points.map((point, index) => `${index === 0 ? "M" : "L"}${xFor(point.date)} ${30 - ((point.value - low) / range) * 26}`).join(" ");
   const startYear = new Date(firstDate).getUTCFullYear();
   const endYear = new Date(lastDate).getUTCFullYear();
-  const firstTick = Math.ceil(startYear / 5) * 5;
-  const ticks = Array.from({ length: Math.max(0, Math.floor(endYear / 5) - Math.ceil(startYear / 5) + 1) }, (_, index) => firstTick + index * 5);
+  const yearStep = endYear - startYear >= 10 ? 5 : 1;
+  const firstTick = Math.ceil(startYear / yearStep) * yearStep;
+  const ticks = Array.from({ length: Math.max(0, Math.floor(endYear / yearStep) - Math.ceil(startYear / yearStep) + 1) }, (_, index) => firstTick + index * yearStep)
+    .filter((year) => {
+      const tickAt = Date.UTC(year, 0, 1);
+      return tickAt >= firstDate && tickAt <= lastDate;
+    });
   return <div className="macro-chart-wrap" role="img" aria-label={`Historical trend from ${startYear} to ${endYear}`}>
     <svg viewBox="0 0 100 36" preserveAspectRatio="none" className="macro-chart" aria-hidden="true">
       <path className="macro-chart-axis" d="M0 32H100" />
@@ -46,18 +53,39 @@ function Sparkline({ points }: { points: MacroPoint[] }) {
   </div>;
 }
 
-function SeriesCard({ definition, series }: { definition: MetricDefinition; series?: MacroSeries }) {
-  if (!series) return <article className="live-series-card pending-series-card"><div className="series-heading"><p>{definition.label}</p><h2>—</h2></div><div className="series-pending"><p>CONNECTOR PENDING</p><span>{definition.connectorHint}</span></div></article>;
+function metricLabel(definition: MetricDefinition, country: string) {
+  if (definition.key === "fx-usd" && country === "US") return "USD INDEX · BROAD";
+  if (definition.key === "fx-usd" && country === "CA") return "USD / CAD";
+  if (definition.key === "fx-usd" && country === "PL") return "USD / PLN";
+  if (definition.key === "fx-usd" && country === "CH") return "USD / CHF";
+  if (definition.key === "fx-usd" && country === "JP") return "USD / JPY";
+  return definition.label;
+}
+
+function SeriesCard({ definition, series, country }: { definition: MetricDefinition; series?: MacroSeries; country: string }) {
+  const label = metricLabel(definition, country);
+  const usesUsdBaseFxQuote = definition.key === "fx-usd" && ["CA", "PL", "CH", "JP"].includes(country);
+  const [range, setRange] = useState<20 | 5 | 1>(20);
+  const visiblePoints = useMemo(() => {
+    const points = series?.points ?? [];
+    const latest = points.at(-1);
+    if (!latest) return [];
+    const cutoff = new Date(`${latest.date}T00:00:00Z`);
+    cutoff.setUTCFullYear(cutoff.getUTCFullYear() - range);
+    return points.filter((point) => Date.parse(`${point.date}T00:00:00Z`) >= cutoff.getTime());
+  }, [range, series?.points]);
+  if (!series) return <article className="live-series-card pending-series-card"><div className="series-heading"><p>{label}</p><h2>—</h2></div><div className="series-pending"><p>CONNECTOR PENDING</p><span>{definition.connectorHint}</span></div></article>;
   const isInflation = ["cpi", "core-cpi", "inflation-cpi-annual"].includes(series.slug);
+  const displayUnit = usesUsdBaseFxQuote ? "local currency per USD" : series.unit;
+  const displayLatest = usesUsdBaseFxQuote ? 1 / series.latest.value : series.latest.value;
+  const displayPoints = usesUsdBaseFxQuote ? visiblePoints.map((point) => ({ ...point, value: 1 / point.value })) : visiblePoints;
   return <article className="live-series-card">
-    <div className="series-heading"><p>{definition.label}</p><h2>{isInflation && series.change !== undefined ? `${series.change.toFixed(2)}%` : formatValue(series.latest.value, series.unit)}</h2></div>
+    <div className="series-heading"><p>{label}</p><h2>{isInflation && series.change !== undefined ? `${series.change.toFixed(2)}%` : formatValue(displayLatest, displayUnit)}</h2></div>
     <dl className="series-meta">
       <div><dt>PERIOD</dt><dd>{formatDate(series.latest.date)}</dd></div>
       <div><dt>OFFICIAL VINTAGE</dt><dd>{formatDate(series.asOfDate)}</dd></div>
-      <div><dt>SOURCE</dt><dd>{series.sourceName}</dd></div>
-      <div><dt>DATA STATUS</dt><dd>{series.freshness}</dd></div>
     </dl>
-    <div className="series-chart"><Sparkline points={series.points} /></div>
+    <div className="series-chart"><div className="series-chart-controls" aria-label={`${label} chart range`}>{([20, 5, 1] as const).map((years) => <button type="button" key={years} className={range === years ? "is-active" : ""} onClick={() => setRange(years)}>{years}Y</button>)}</div><Sparkline points={displayPoints} /></div>
   </article>;
 }
 
@@ -80,9 +108,9 @@ function EvidenceTimeline({ events, referenceAt }: { events: MacroEvent[]; refer
       || (filter === "market" ? event.relevance === "MARKET_MOVING" : filter === "research" ? event.relevance === "RESEARCH_SIGNAL" : event.verification === "UNVERIFIED");
     return withinPeriod && matchesImpact;
   }).sort((a, b) => ((b.score ?? b.materiality) - (a.score ?? a.materiality)) || (Date.parse(b.occurredAt) - Date.parse(a.occurredAt)));
-  const filters: { value: typeof filter; label: string }[] = [{ value: "all", label: "ALL RESEARCH" }, { value: "market", label: "MARKET MOVING" }, { value: "research", label: "RESEARCH SIGNALS" }, { value: "unverified", label: "UNVERIFIED" }];
+  const filters: { value: typeof filter; label: string }[] = [{ value: "all", label: "ALL EVENTS" }, { value: "market", label: "MARKET MOVING" }, { value: "research", label: "RESEARCH SIGNALS" }, { value: "unverified", label: "UNVERIFIED" }];
   const periods: { value: typeof period; label: string }[] = [{ value: "day", label: "DAY" }, { value: "week", label: "WEEK" }, { value: "month", label: "MONTH" }];
-  return <section className="evidence-timeline"><div className="section-label"><span>EVIDENCE</span><h2>RESEARCH EVENTS</h2><span>{events.length ? `${visible.length} EVENT${visible.length === 1 ? "" : "S"} · ${period.toUpperCase()}` : "NO RESEARCH EVENTS"}</span></div>{events.length ? <><div className="evidence-filter-groups"><div className="evidence-filters" aria-label="Filter event relevance">{filters.map((item) => <button type="button" key={item.value} className={filter === item.value ? "is-active" : ""} onClick={() => setFilter(item.value)}>{item.label}</button>)}</div><div className="evidence-filters" aria-label="Filter event period">{periods.map((item) => <button type="button" key={item.value} className={period === item.value ? "is-active" : ""} onClick={() => setPeriod(item.value)}>{item.label}</button>)}</div></div><div className="evidence-list">{visible.map((event) => <a key={event.id} href={event.originalUrl} target="_blank" rel="noreferrer" className="evidence-item"><div><p>{new Date(event.occurredAt).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric", timeZone: "UTC" }).toUpperCase()} · {event.sourceName}{event.sourceCount > 1 ? ` · ${event.sourceCount} SOURCES` : ""}</p><h3>{event.title}</h3></div><div><span className={`risk-relevance relevance-${event.relevance.toLowerCase().replaceAll("_", "-")}`}>{relevanceLabels[event.relevance]}</span><span className={`risk-verification risk-${event.verification.toLowerCase().replaceAll("_", "-")}`}>{verificationLabels[event.verification]}</span><span>S{(event.score ?? event.materiality).toFixed(1)}</span><span>{event.eventType.replaceAll("_", " ")}</span><span>{event.indicators.join(" · ") || "OFFICIAL COMMUNICATION"}</span></div></a>)}</div>{!visible.length && <p className="evidence-empty">NO EVENTS MATCH THIS FILTER FOR THE SELECTED PERIOD.</p>}</> : <p className="evidence-empty">THE ACTIVE 45-DAY WINDOW HAS NO RESEARCH EVENTS FOR THIS DESK.</p>}</section>;
+  return <section className="evidence-timeline"><div className="section-label"><h2>NEWS & EVENTS</h2><span>{events.length ? `${visible.length} EVENT${visible.length === 1 ? "" : "S"} · ${period.toUpperCase()}` : "NO NEWS OR EVENTS"}</span></div>{events.length ? <><div className="evidence-filter-groups"><div className="evidence-filters" aria-label="Filter event relevance">{filters.map((item) => <button type="button" key={item.value} className={filter === item.value ? "is-active" : ""} onClick={() => setFilter(item.value)}>{item.label}</button>)}</div><div className="evidence-filters" aria-label="Filter event period">{periods.map((item) => <button type="button" key={item.value} className={period === item.value ? "is-active" : ""} onClick={() => setPeriod(item.value)}>{item.label}</button>)}</div></div><div className="evidence-list">{visible.map((event) => <a key={event.id} href={event.originalUrl} target="_blank" rel="noreferrer" className="evidence-item"><div><p>{new Date(event.occurredAt).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric", timeZone: "UTC" }).toUpperCase()} · {event.sourceName}{event.sourceCount > 1 ? ` · ${event.sourceCount} SOURCES` : ""}</p><h3>{event.title}</h3></div><div><span className={`risk-relevance relevance-${event.relevance.toLowerCase().replaceAll("_", "-")}`}>{relevanceLabels[event.relevance]}</span><span className={`risk-verification risk-${event.verification.toLowerCase().replaceAll("_", "-")}`}>{verificationLabels[event.verification]}</span><span>S{(event.score ?? event.materiality).toFixed(1)}</span><span>{event.eventType.replaceAll("_", " ")}</span><span>{event.indicators.join(" · ") || "OFFICIAL COMMUNICATION"}</span></div></a>)}</div>{!visible.length && <p className="evidence-empty">NO EVENTS MATCH THIS FILTER FOR THE SELECTED PERIOD.</p>}</> : <p className="evidence-empty">THE ACTIVE 45-DAY WINDOW HAS NO NEWS OR EVENTS FOR THIS DESK.</p>}</section>;
 }
 
 const calendarHorizons = [
@@ -121,7 +149,7 @@ function UpcomingCalendar({ events, referenceAt, sources }: { events: CalendarEv
       return next;
     });
   };
-  return <section className="calendar-strip"><div className="section-label"><span>FORWARD LOOKING</span><h2>UPCOMING CALENDAR</h2><span>{hasConnector ? `${visible.length} EVENT${visible.length === 1 ? "" : "S"} · ${horizon.toUpperCase()}` : "CONNECTOR PENDING"}</span></div>{hasConnector ? <><div className="evidence-filters" aria-label="Filter country calendar period">{calendarHorizons.map((item) => <button type="button" key={item.value} className={horizon === item.value ? "is-active" : ""} onClick={() => setHorizon(item.value)}>{item.label}</button>)}</div>{visible.length ? <div className="calendar-list">{[...days.entries()].sort(([left], [right]) => left.localeCompare(right)).map(([day, dayEvents]) => {
+  return <section className="calendar-strip"><div className="section-label"><h2>CALENDAR</h2><span>{hasConnector ? `${visible.length} EVENT${visible.length === 1 ? "" : "S"} · ${horizon.toUpperCase()}` : "CONNECTOR PENDING"}</span></div>{hasConnector ? <><div className="evidence-filters" aria-label="Filter country calendar period">{calendarHorizons.map((item) => <button type="button" key={item.value} className={horizon === item.value ? "is-active" : ""} onClick={() => setHorizon(item.value)}>{item.label}</button>)}</div>{visible.length ? <div className="calendar-list">{[...days.entries()].sort(([left], [right]) => left.localeCompare(right)).map(([day, dayEvents]) => {
     const collapsed = collapsedDays.has(day);
     return <section className="calendar-day" key={day}><button type="button" className="calendar-day-header" aria-expanded={!collapsed} onClick={() => toggleDay(day)}><span>{dayLabel(day)}</span><span>{dayEvents.length} RELEASE{dayEvents.length === 1 ? "" : "S"} <i aria-hidden="true">{collapsed ? "+" : "−"}</i></span></button>{!collapsed && <div>{dayEvents.map((event) => { const level = impactLevel(event.importance); const timing = event.timingPrecision === "date_only" ? "TIME TBC" : `${event.timingPrecision === "estimated" ? "EST. " : ""}${new Date(event.scheduledAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "UTC", hour12: false })} UTC`; return <a key={event.id} className="calendar-event" href={event.sourceUrl} target="_blank" rel="noreferrer"><span className="calendar-impact" aria-label={`Impact ${level} of 3`}>{[1, 2, 3].map((dot) => <i key={dot} className={dot <= level ? "is-active" : ""} />)}</span><div><h3>{event.title}</h3><p>{event.category?.toUpperCase() ?? "MACRO"} · {timing}</p></div><span className="calendar-previous">{event.previous ? `PREV ${event.previous}` : "PREV —"}</span></a>; })}</div>}</section>;
   })}</div> : <p className="evidence-empty">NO SCHEDULED RELEASES IN THE SELECTED PERIOD.</p>}</> : <p className="evidence-empty">AN AUTHORISED CALENDAR PROVIDER IS REQUIRED BEFORE UPCOMING RELEASES CAN BE SHOWN.</p>}</section>;
@@ -154,5 +182,5 @@ export default function CountryMacroDesk({ country }: { country: string }) {
   }, [country]);
   if (error) return <p className="empty-line">{error.toUpperCase()}</p>;
   if (!desk) return <p className="empty-line">LOADING LIVE MACRO DATA…</p>;
-  return <><section className="regime-card"><p>RULES-BASED REGIME</p><h2>{desk.regime}</h2><span>{desk.rationale}</span><small>REFRESHED {new Date(desk.generatedAt).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })}</small></section><div className="live-series-grid">{topMetrics.map((definition) => <SeriesCard key={definition.key} definition={definition} series={desk.series.find((series) => definition.seriesSlugs.includes(series.slug))} />)}</div><UpcomingCalendar events={desk.calendar} referenceAt={desk.generatedAt} sources={desk.calendarSources} /><EvidenceTimeline events={desk.events} referenceAt={desk.generatedAt} /></>;
+  return <><section className="regime-card"><p>RULES-BASED REGIME</p><h2>{desk.regime}</h2><span>{desk.rationale}</span><small>REFRESHED {new Date(desk.generatedAt).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })}</small></section><div className="live-series-grid">{topMetrics.map((definition) => <SeriesCard key={definition.key} definition={definition} country={country} series={desk.series.find((series) => definition.seriesSlugs.includes(series.slug))} />)}</div><UpcomingCalendar events={desk.calendar} referenceAt={desk.generatedAt} sources={desk.calendarSources} /><EvidenceTimeline events={desk.events} referenceAt={desk.generatedAt} /></>;
 }

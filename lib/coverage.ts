@@ -1,7 +1,7 @@
 export type CoverageState = "LIVE" | "PARTIAL" | "DELAYED" | "MISSING";
 
 export type MetricCoverage = {
-  key: "policy" | "headline-inflation" | "core-inflation" | "unemployment" | "real-gdp-growth" | "sovereign-10y";
+  key: "core-inflation" | "gdp" | "unemployment" | "policy" | "sovereign-10y" | "fx-usd";
   label: string;
   status: CoverageState;
   reason: string;

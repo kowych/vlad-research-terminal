@@ -64,6 +64,8 @@ docker compose exec -T postgres psql -U research -d muklanovich_research \
   -v ON_ERROR_STOP=1 -f /dev/stdin < database/migrations/026_market_moving_news_filter.sql
 docker compose exec -T postgres psql -U research -d muklanovich_research \
   -v ON_ERROR_STOP=1 -f /dev/stdin < database/migrations/027_research_signal_news_feed.sql
+docker compose exec -T postgres psql -U research -d muklanovich_research \
+  -v ON_ERROR_STOP=1 -f /dev/stdin < database/migrations/028_fx_reference_rates.sql
 ```
 
 ## Data updates
@@ -90,9 +92,10 @@ set -a; source ingestion/.env; set +a
 .venv/bin/python ingestion/rba_macro.py
 .venv/bin/python ingestion/ecb_euro_area.py
 .venv/bin/python ingestion/eurostat_country_metrics.py
+.venv/bin/python ingestion/fx_rates.py --backfill
 ```
 
-The RBA, ECB and Eurostat workers consume public official data; they require only `DATABASE_URL`. The FRED worker additionally requires `FRED_API_KEY`.
+The RBA, ECB, Eurostat and FX workers consume public official data; they require only `DATABASE_URL`. Run `fx_rates.py --backfill` once to load twenty years of history; normal `fx_rates.py` runs refresh only the trailing 45 days. The desk cards then provide 20Y / 5Y / 1Y chart controls. The worker uses official ECB reference rates for the long history of the supported currency universe, keeps Bank of Canada Valet as an independent daily cross-check, and uses first-party UAH and RUB reference rates. Iran remains intentionally pending until a rate-regime policy can distinguish its official and market rates. The FRED worker additionally requires `FRED_API_KEY`; it supplies the US Broad Dollar Index, which is correctly labelled separately from ICE DXY.
 
 ## Verification
 

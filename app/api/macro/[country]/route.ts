@@ -12,8 +12,8 @@ type CalendarSourceRow = { name: string };
 type NewsHealthRow = { slug: string; name: string; status: "completed" | "failed" | null; completed_at: string | null; records_written: number | null; error_message: string | null };
 
 const historyLimits: Record<string, number> = {
-  "policy-rate": 2_600, cpi: 180, "core-cpi": 180, "unemployment-rate": 180, "nonfarm-payrolls": 180,
-  "real-gdp": 80, "real-gdp-growth": 80, "treasury-2y": 2_600, "treasury-10y": 2_600, "sovereign-10y": 2_600,
+  "policy-rate": 6_000, cpi: 300, "core-cpi": 300, "unemployment-rate": 300, "nonfarm-payrolls": 300,
+  "real-gdp": 120, "real-gdp-growth": 120, "gdp-current-usd": 120, "fx-usd": 6_000, "treasury-2y": 6_000, "treasury-10y": 6_000, "sovereign-10y": 6_000,
 };
 
 function displayValue(row: SeriesRow): number {
@@ -60,18 +60,35 @@ export async function GET(_request: Request, context: RouteContext<"/api/macro/[
     return Response.json({ error: `Unknown country: ${iso2}.` }, { status: 404 });
   }
   const { rows } = await query<SeriesRow>(`
-    with ranked_observations as (
+    with latest_source_observations as (
+      select ss.id as source_series_id, i.slug, s.slug as source_slug, s.tier as source_tier, max(o.period_start) as latest_period
+      from observations o join source_series ss on ss.id = o.source_series_id
+      join indicators i on i.id = ss.indicator_id join sources s on s.id = ss.source_id join countries c on c.id = ss.country_id
+      where c.iso2 = $1 and o.value is not null and o.period_start <= current_date
+      group by ss.id, i.slug, s.slug, s.tier
+    ), preferred_source_series as (
+      select source_series_id, row_number() over (
+        partition by slug
+        order by
+          case when slug = 'fx-usd' and source_slug = 'ecb-data-portal' then 0 else 1 end,
+          latest_period desc,
+          source_tier asc,
+          source_slug asc
+      ) as source_rank
+      from latest_source_observations
+    ), ranked_observations as (
       select i.slug, coalesce(ss.display_name, i.name) as name, coalesce(ss.unit, i.unit) as unit, coalesce(ss.frequency, i.frequency) as frequency, s.name as source_name,
         o.period_start::text, o.period_end::text, o.value::text, coalesce(o.as_of_date, o.period_start)::text as as_of_date, o.ingested_at::text,
         row_number() over (partition by i.slug order by o.period_start desc) as row_number
       from observations o join source_series ss on ss.id = o.source_series_id
       join indicators i on i.id = ss.indicator_id join sources s on s.id = ss.source_id join countries c on c.id = ss.country_id
+      join preferred_source_series preferred on preferred.source_series_id = ss.id and preferred.source_rank = 1
       where c.iso2 = $1 and o.value is not null and o.period_start <= current_date
         -- CPI series for Russia and Ukraine are intentionally shown only from
         -- 2000 onwards: earlier observations are retained as raw provenance.
         and not (c.iso2 in ('RU', 'UA') and i.slug = 'inflation-cpi-annual' and o.period_start < date '2000-01-01')
     ) select slug, name, unit, frequency, source_name, period_start, period_end, value, as_of_date, ingested_at
-    from ranked_observations where row_number <= 2_600 order by slug, period_start desc
+    from ranked_observations where row_number <= 6_000 order by slug, period_start desc
   `, [iso2]);
   if (!rows.length) return Response.json({ error: `No data available for ${iso2}.` }, { status: 404 });
 

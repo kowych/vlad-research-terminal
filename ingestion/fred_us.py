@@ -42,6 +42,7 @@ US_SERIES = (
     SeriesDefinition("real-gdp-growth", "A191RL1Q225SBEA", "Real GDP Growth", "percent", "quarterly"),
     SeriesDefinition("treasury-2y", "DGS2", "2-Year US Treasury Yield", "percent", "daily"),
     SeriesDefinition("treasury-10y", "DGS10", "10-Year US Treasury Yield", "percent", "daily"),
+    SeriesDefinition("fx-usd", "DTWEXBGS", "Nominal Broad U.S. Dollar Index", "index", "daily"),
 )
 
 JAPAN_SERIES = (

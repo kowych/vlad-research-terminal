@@ -5,15 +5,27 @@ import { useEffect, useState } from "react";
 const timeZone = "Europe/Warsaw";
 
 export default function LiveClock() {
-  const [now, setNow] = useState(new Date());
+  const [now, setNow] = useState<Date | null>(null);
 
   useEffect(() => {
+    const updateClock = () => setNow(new Date());
+    updateClock();
+
     const timer = setInterval(() => {
-      setNow(new Date());
+      updateClock();
     }, 1000);
 
     return () => clearInterval(timer);
   }, []);
+
+  if (!now) {
+    return (
+      <div className="hidden sm:block text-right font-mono text-xs tracking-wider text-zinc-400" aria-label="Local time loading">
+        <div>—</div>
+        <div className="text-zinc-600">—</div>
+      </div>
+    );
+  }
 
   const date = now.toLocaleDateString("en-GB", {
     day: "2-digit",

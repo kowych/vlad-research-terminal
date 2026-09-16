@@ -12,9 +12,7 @@ function statusLabel(status: ReturnType<typeof getCountryDeskStatus>) {
 }
 
 function deskDescription(status: ReturnType<typeof getCountryDeskStatus>) {
-  if (status === "live") {
-    return "A live, reproducible macro desk built from the local ingestion pipeline. Values are shown at their latest available official observation date.";
-  }
+  if (status === "live") return undefined;
   if (status === "partial") {
     return "Available observations are shown with their original period and vintage. This desk is not yet a complete current macro assessment.";
   }
@@ -56,8 +54,8 @@ export default async function CountryMacroPage({ params }: { params: Promise<{ c
         description={deskDescription(status)}
       />
       <section className="country-facts">
-        <div><p>CAPITAL</p><strong>{country.capital}</strong></div>
-        <div><p>CURRENCY</p><strong>{country.currency}</strong></div>
+        <div className="country-fact-compact"><p>CAPITAL</p><strong>{country.capital}</strong></div>
+        <div className="country-fact-compact"><p>CURRENCY</p><strong>{country.currency}</strong></div>
         <div><p>CENTRAL BANK</p><a href={country.centralBankUrl} target="_blank" rel="noreferrer">{country.centralBank} ↗</a></div>
         <div><p>ECONOMIC DRIVERS</p><strong>{country.economicDrivers.join(" · ")}</strong></div>
       </section>
